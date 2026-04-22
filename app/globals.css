@@ -2,15 +2,37 @@
 
 :root {
   --font-geist: "Geist", system-ui, sans-serif;
+  /* Safe full-height that excludes mobile browser chrome */
+  --app-height: 100dvh;
 }
 
-html, body {
+html {
+  height: 100%;
+}
+
+body {
   height: 100%;
   overflow: hidden;
+  /* Prevent iOS rubber-band scroll on the body */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Use dvh (dynamic viewport height) so layout shrinks when keyboard opens */
+.app-shell {
+  height: 100dvh;
+  height: -webkit-fill-available;
+}
+
+/* Fallback for browsers without dvh support */
+@supports not (height: 100dvh) {
+  .app-shell {
+    height: 100vh;
+  }
 }
 
 /* Custom scrollbar */
@@ -28,7 +50,6 @@ html, body {
   background: #52525b;
 }
 
-/* Bounce animation */
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }

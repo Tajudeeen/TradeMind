@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useEffect, useRef } from "react";
 import { ChatMessage } from "@/types";
@@ -28,9 +28,14 @@ export default function ChatPanel({
 }: ChatPanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messageCountRef = useRef(0);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const hasNewContent = messages.length > messageCountRef.current || isLoading;
+    if (hasNewContent && messages.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    messageCountRef.current = messages.length;
   }, [messages, isLoading]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -40,14 +45,9 @@ export default function ChatPanel({
     }
   };
 
-  const handleSuggestion = (prompt: string) => {
-    onSend(prompt);
-  };
-
   return (
-    <div className="flex flex-col h-full">
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scroll-smooth">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0 overscroll-contain">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-6">
             <div className="text-center">
@@ -62,7 +62,7 @@ export default function ChatPanel({
               {SUGGESTED_PROMPTS.map((p) => (
                 <button
                   key={p}
-                  onClick={() => handleSuggestion(p)}
+                  onClick={() => onSend(p)}
                   className="text-left text-sm px-4 py-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/60 text-zinc-400 hover:text-zinc-200 hover:border-violet-800/50 hover:bg-violet-950/20 transition-all duration-150"
                 >
                   {p}
@@ -81,8 +81,7 @@ export default function ChatPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* Input area */}
-      <div className="border-t border-zinc-800/60 p-4">
+      <div className="flex-shrink-0 border-t border-zinc-800/60 p-4">
         <div className="flex items-end gap-3 bg-zinc-900/60 border border-zinc-800/60 rounded-2xl px-4 py-3 focus-within:border-violet-700/50 transition-colors">
           <textarea
             ref={inputRef}
@@ -90,7 +89,6 @@ export default function ChatPanel({
             value={inputValue}
             onChange={(e) => {
               onInputChange(e.target.value);
-              // auto-resize
               e.target.style.height = "auto";
               e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
             }}
@@ -110,7 +108,7 @@ export default function ChatPanel({
             </svg>
           </button>
         </div>
-        <div className="text-xs text-zinc-700 text-center mt-2">
+        <div className="text-xs text-zinc-700 text-center mt-2 hidden sm:block">
           Enter to send · Shift+Enter for new line
         </div>
       </div>
@@ -130,26 +128,21 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           </div>
         )}
         <div>
-          <div
-            className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-              isUser
-                ? "bg-violet-600/20 border border-violet-700/30 text-zinc-200 rounded-br-sm"
-                : "bg-zinc-900/80 border border-zinc-800/60 text-zinc-200 rounded-bl-sm"
-            }`}
-          >
+          <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+            isUser
+              ? "bg-violet-600/20 border border-violet-700/30 text-zinc-200 rounded-br-sm"
+              : "bg-zinc-900/80 border border-zinc-800/60 text-zinc-200 rounded-bl-sm"
+          }`}>
             {message.content}
           </div>
 
-          {/* Action badge */}
           {!isUser && message.action && message.action.type !== "none" && (
             <div className="mt-1.5 ml-0.5">
               <ActionBadge action={message.action} />
             </div>
           )}
 
-          <div
-            className={`text-xs text-zinc-700 mt-1 ${isUser ? "text-right" : "ml-0.5"}`}
-          >
+          <div className={`text-xs text-zinc-700 mt-1 ${isUser ? "text-right" : "ml-0.5"}`}>
             {new Date(message.timestamp).toLocaleTimeString("en-US", {
               hour: "2-digit",
               minute: "2-digit",
@@ -178,9 +171,7 @@ function ActionBadge({ action }: { action: ChatMessage["action"] }) {
   };
 
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border ${styles[action.type]}`}
-    >
+    <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border ${styles[action.type]}`}>
       <span>{icons[action.type]}</span>
       {action.label}
     </span>

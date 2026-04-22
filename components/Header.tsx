@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 interface HeaderProps {
   walletAddress: string | null;
@@ -7,12 +7,7 @@ interface HeaderProps {
   userId: string;
 }
 
-export default function Header({
-  walletAddress,
-  onConnect,
-  onReset,
-  userId,
-}: HeaderProps) {
+export default function Header({ walletAddress, onConnect, onReset, userId }: HeaderProps) {
   const shortAddr = walletAddress
     ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
     : null;
@@ -26,12 +21,10 @@ export default function Header({
           </svg>
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-sm font-semibold text-zinc-100 tracking-tight">
-            TradeMind
-          </span>
-          <span className="text-xs text-zinc-600">
-            #{userId.slice(0, 8)}
-          </span>
+          <span className="text-sm font-semibold text-zinc-100 tracking-tight">TradeMind</span>
+          {userId && (
+            <span className="text-xs text-zinc-600">#{userId.slice(0, 8)}</span>
+          )}
         </div>
         <div className="hidden sm:flex items-center gap-1.5 bg-emerald-950/40 border border-emerald-900/40 rounded-full px-2.5 py-0.5">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -43,11 +36,9 @@ export default function Header({
         <button
           onClick={onReset}
           className="text-xs text-zinc-600 hover:text-zinc-400 px-3 py-1.5 rounded-lg hover:bg-zinc-900 transition-colors"
-          title="Reset memory"
         >
           Reset Memory
         </button>
-
         <button
           onClick={onConnect}
           className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${

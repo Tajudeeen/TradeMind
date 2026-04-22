@@ -56,7 +56,6 @@ export default function MemoryInsightsPanel({
   const topBehaviors = [...memory.user_behavior]
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
-
   const recentTrades = memory.trade_history.slice(0, 3);
 
   return (
@@ -65,7 +64,6 @@ export default function MemoryInsightsPanel({
         Memory Insights
       </div>
 
-      {/* Risk Profile */}
       <div
         className={`rounded-xl border p-3 ${RISK_BG[memory.risk_profile] || RISK_BG.unknown}`}
       >
@@ -81,7 +79,6 @@ export default function MemoryInsightsPanel({
         </div>
       </div>
 
-      {/* Stats Row */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-3">
           <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">
@@ -101,7 +98,6 @@ export default function MemoryInsightsPanel({
         </div>
       </div>
 
-      {/* Behavior Patterns */}
       {topBehaviors.length > 0 && (
         <div>
           <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">
@@ -130,7 +126,6 @@ export default function MemoryInsightsPanel({
         </div>
       )}
 
-      {/* Recent Trade Simulations */}
       {recentTrades.length > 0 && (
         <div>
           <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">
@@ -151,8 +146,8 @@ export default function MemoryInsightsPanel({
                       t.direction === "long"
                         ? "bg-emerald-950/60 text-emerald-400"
                         : t.direction === "short"
-                        ? "bg-rose-950/60 text-rose-400"
-                        : "bg-zinc-800 text-zinc-400"
+                          ? "bg-rose-950/60 text-rose-400"
+                          : "bg-zinc-800 text-zinc-400"
                     }`}
                   >
                     {t.direction.toUpperCase()}
@@ -173,7 +168,6 @@ export default function MemoryInsightsPanel({
         </div>
       )}
 
-      {/* Agent Notes */}
       {memory.notes.length > 0 && (
         <div>
           <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">
@@ -181,7 +175,10 @@ export default function MemoryInsightsPanel({
           </div>
           <div className="flex flex-col gap-1">
             {memory.notes.slice(0, 3).map((note, i) => (
-              <div key={i} className="text-xs text-zinc-500 leading-relaxed pl-2 border-l border-violet-900/50">
+              <div
+                key={i}
+                className="text-xs text-zinc-500 leading-relaxed pl-2 border-l border-violet-900/50"
+              >
                 {note}
               </div>
             ))}

@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useState, useCallback, useEffect } from "react";
 import { ChatMessage, AgentMemory, AgentResponse } from "@/types";
@@ -16,7 +16,6 @@ function getOrCreateUserId(): string {
 }
 
 export default function TradeMindApp() {
-  // Empty string on server, real ID set after hydration via useEffect
   const [userId, setUserId] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [memory, setMemory] = useState<AgentMemory | null>(null);
@@ -25,12 +24,10 @@ export default function TradeMindApp() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [showInsights, setShowInsights] = useState(false);
 
-  // Client-only: read/create userId from localStorage after hydration
   useEffect(() => {
     setUserId(getOrCreateUserId());
   }, []);
 
-  // Load memory once userId is ready
   useEffect(() => {
     if (!userId) return;
     fetch(`/api/agent?userId=${userId}`)
@@ -112,15 +109,15 @@ export default function TradeMindApp() {
   };
 
   return (
-    <div className="h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
+    <div className="app-shell bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
       <Header
         walletAddress={walletAddress}
         onConnect={handleConnect}
         onReset={handleReset}
         userId={userId}
       />
-      <div className="flex flex-1 overflow-hidden">
-        <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex flex-1 overflow-hidden min-h-0">
+        <main className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
           <ChatPanel
             messages={messages}
             isLoading={isLoading}
@@ -134,7 +131,6 @@ export default function TradeMindApp() {
         </aside>
       </div>
 
-      {/* Mobile memory toggle */}
       <div className="lg:hidden fixed bottom-20 right-4 z-10">
         <button
           onClick={() => setShowInsights((v) => !v)}
@@ -144,7 +140,6 @@ export default function TradeMindApp() {
         </button>
       </div>
 
-      {/* Mobile memory drawer */}
       {showInsights && (
         <div
           className="lg:hidden fixed inset-0 z-20 bg-black/60"
