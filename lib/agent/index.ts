@@ -1,70 +1,81 @@
-/**
- * Agent Orchestrator
- *
- * Flow: input → fetch memory → reason → extract signals → update memory → return
- */
+import { AgentMemory } from "@/types";
 
-import { AgentMemory, AgentResponse } from "@/types";
-import { readMemory, writeMemory } from "@/lib/storage";
-import {
-  extractBehaviorSignals,
-  updateBehaviorTags,
-  logTradeSimulation,
-} from "./behavior";
-import { runAgentReasoning } from "./reasoning";
+// In-memory store — always works, survives any fs failure
+const memoryStore = new Map<string, AgentMemory>();
 
-export async function processAgentMessage(
-  userId: string,
-  userInput: string
-): Promise<AgentResponse> {
-  // 1. Fetch persistent memory
-  let memory = await readMemory(userId);
-  memory.interaction_count++;
-
-  // 2. Extract behavior signals from raw input
-  const signals = extractBehaviorSignals(userInput);
-
-  // 3. Update behavior tags in memory
-  memory = updateBehaviorTags(memory, signals);
-
-  // 4. Run AI reasoning with full memory context
-  const { message, reasoning, action, behavioral_signals } =
-    await runAgentReasoning(userInput, memory);
-
-  // 5. Handle action side effects
-  if (action.type === "simulate_trade" && action.payload) {
-    const asset = (action.payload.asset as string) || "ETH";
-    const direction = (action.payload.direction as "long" | "short" | "hold") || "long";
-    memory = logTradeSimulation(memory, {
-      asset,
-      direction,
-      reasoning: `${message.slice(0, 120)}...`,
-      user_input: userInput,
-      simulated: true,
-      outcome: "pending",
-    });
-  }
-
-  // 6. Merge AI-detected signals with rule-based ones
-  const allSignalTags = [
-    ...signals.map((s) => s.tag),
-    ...behavioral_signals,
-  ];
-
-  // 7. Add agent note if high-signal interaction
-  if (allSignalTags.length > 0) {
-    const note = `[${new Date().toLocaleDateString()}] ${allSignalTags.join(", ")} detected: "${userInput.slice(0, 60)}"`;
-    memory.notes = [note, ...memory.notes].slice(0, 20);
-  }
-
-  // 8. Persist updated memory
-  await writeMemory(memory);
-
+export function defaultMemory(userId: string): AgentMemory {
   return {
-    message,
-    reasoning,
-    action,
-    updated_memory: memory,
-    behavioral_signals: allSignalTags,
+    userId,
+    risk_profile: "unknown",
+    user_behavior: [],
+    trade_history: [],
+    notes: [],
+    interaction_count: 0,
+    last_updated: new Date().toISOString(),
   };
+}
+
+function getFS() {
+  try {
+    const fs = require("fs") as typeof import("fs");
+    const path = require("path") as typeof import("path");
+    const dir = path.join(process.cwd(), ".trademind-storage");
+    return { fs, path, dir };
+  } catch {
+    return null;
+  }
+}
+
+function readFile(userId: string): AgentMemory | null {
+  try {
+    const mod = getFS();
+    if (!mod) return null;
+    const { fs, path, dir } = mod;
+    const file = path.join(dir, `${userId}.json`);
+    if (!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file, "utf-8")) as AgentMemory;
+  } catch {
+    return null;
+  }
+}
+
+function writeFile(memory: AgentMemory): void {
+  try {
+    const mod = getFS();
+    if (!mod) return;
+    const { fs, path, dir } = mod;
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${memory.userId}.json`);
+    fs.writeFileSync(file, JSON.stringify(memory, null, 2), "utf-8");
+  } catch {
+    // silent — in-memory is the source of truth
+  }
+}
+
+export async function readMemory(userId: string): Promise<AgentMemory> {
+  // Cache hit
+  if (memoryStore.has(userId)) return memoryStore.get(userId)!;
+  // Try disk
+  const fromDisk = readFile(userId);
+  if (fromDisk) {
+    memoryStore.set(userId, fromDisk);
+    return fromDisk;
+  }
+  // Fresh
+  const fresh = defaultMemory(userId);
+  memoryStore.set(userId, fresh);
+  return fresh;
+}
+
+export async function writeMemory(memory: AgentMemory): Promise<void> {
+  memory.last_updated = new Date().toISOString();
+  memoryStore.set(memory.userId, { ...memory });
+  writeFile(memory);
+}
+
+export async function resetMemory(userId: string): Promise<AgentMemory> {
+  const fresh = defaultMemory(userId);
+  memoryStore.set(userId, fresh);
+  writeFile(fresh);
+  return fresh;
 }
