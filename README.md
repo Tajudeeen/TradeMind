@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TradeMind — Onchain AI Trading Agent
 
-## Getting Started
+A personal onchain AI agent that learns from your trading behavior, stores persistent memory, and evolves its responses over time.
 
-First, run the development server:
+> Not a chatbot. A system with memory.
+
+## Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. No API key required — adaptive fallback works out of the box.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Optional: Add AI
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Edit `.env.local`:
 
-## Learn More
+```env
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Architecture
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+types/index.ts              All TypeScript interfaces
+lib/storage/index.ts        Mock 0G Storage (file-backed KV per user)
+lib/agent/behavior.ts       Pattern extraction + behavior learning
+lib/agent/reasoning.ts      AI prompting layer (OpenAI + fallback)
+lib/agent/index.ts          Orchestrator
+app/api/agent/route.ts      API: POST (chat) + GET (memory/reset)
+app/page.tsx                Dashboard
+components/ChatPanel.tsx             Chat interface
+components/MemoryInsightsPanel.tsx   Live memory sidebar
+components/Header.tsx                Nav + wallet connect
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Agent Flow
 
-## Deploy on Vercel
+User Input → Fetch Memory → Extract Signals → Update Behavior Tags → Build Prompt → AI Inference → Handle Action → Persist → Respond
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Memory Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Stored in `.trademind-storage/<userId>.json` (simulates 0G KV):
+
+```json
+{
+  "userId": "abc123",
+  "risk_profile": "aggressive",
+  "user_behavior": [{ "tag": "fomo_driven", "count": 3, "description": "..." }],
+  "trade_history": [{ "asset": "ETH", "direction": "long", "simulated": true }],
+  "notes": ["[4/22] fomo_driven detected: 'is it too late to buy ETH?'"],
+  "interaction_count": 7
+}
+```
+
+## Detected Behavior Patterns
+
+| Tag | Trigger |
+|-----|---------|
+| `late_entry_anxiety` | "too late", "missed it", "already pumped" |
+| `fomo_driven` | "FOMO", "everyone is buying", "mooning" |
+| `risk_averse` | "safe", "too risky", "worried" |
+| `panic_seller` | "sell all", "crashing", "dump" |
+| `high_conviction` | "all in", "double down", "ape in" |
+| `methodical_accumulator` | "DCA", "average in", "scale in" |
+| `bearish_tendency` | "short", "overvalued", "bubble" |
+| `long_term_holder` | "HODL", "long term", "patience" |
+
+## API
+
+`POST /api/agent` — `{ userId, message }` → `{ message, reasoning, action, updated_memory, behavioral_signals }`
+
+`GET /api/agent?userId=...` — fetch memory
+
+`GET /api/agent?userId=...&action=reset` — reset memory
+
+## Production Path (0G Integration)
+
+1. Replace `lib/storage/index.ts` with 0G SDK (`readKV`, `writeKV`, `appendLog`)
+2. Set `OPENAI_BASE_URL` to your 0G Compute node
+3. Add real wallet signing via `ethers.js` (already installed)
