@@ -15,6 +15,21 @@ function getOrCreateUserId(): string {
   return id;
 }
 
+function saveMemoryLocally(memory: AgentMemory) {
+  try {
+    localStorage.setItem(`trademind_memory_${memory.userId}`, JSON.stringify(memory));
+  } catch {}
+}
+
+function loadMemoryLocally(userId: string): AgentMemory | null {
+  try {
+    const raw = localStorage.getItem(`trademind_memory_${userId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function TradeMindApp() {
   const [userId, setUserId] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -25,16 +40,11 @@ export default function TradeMindApp() {
   const [showInsights, setShowInsights] = useState(false);
 
   useEffect(() => {
-    setUserId(getOrCreateUserId());
+    const id = getOrCreateUserId();
+    setUserId(id);
+    const local = loadMemoryLocally(id);
+    if (local) setMemory(local);
   }, []);
-
-  useEffect(() => {
-    if (!userId) return;
-    fetch(`/api/agent?userId=${userId}`)
-      .then((r) => r.json())
-      .then((data) => { if (data.memory) setMemory(data.memory); })
-      .catch(() => {});
-  }, [userId]);
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isLoading || !userId) return;
@@ -51,13 +61,23 @@ export default function TradeMindApp() {
     setIsLoading(true);
 
     try {
+      const currentMemory = loadMemoryLocally(userId);
+
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, message: content }),
+        body: JSON.stringify({
+          userId,
+          message: content,
+          memory: currentMemory,
+        }),
       });
 
-      if (!res.ok) throw new Error("Agent request failed");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server error ${res.status}`);
+      }
+
       const data: AgentResponse = await res.json();
 
       const agentMsg: ChatMessage = {
@@ -71,11 +91,14 @@ export default function TradeMindApp() {
 
       setMessages((prev) => [...prev, agentMsg]);
       setMemory(data.updated_memory);
-    } catch {
+      saveMemoryLocally(data.updated_memory);
+
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Unknown error";
       const errMsg: ChatMessage = {
         id: Math.random().toString(36).slice(2),
         role: "agent",
-        content: "Something went wrong. Check your configuration and try again.",
+        content: `Something went wrong: ${detail}`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errMsg]);
@@ -103,7 +126,7 @@ export default function TradeMindApp() {
 
   const handleReset = async () => {
     if (!confirm("Reset all memory? This cannot be undone.")) return;
-    await fetch(`/api/agent?userId=${userId}&action=reset`);
+    localStorage.removeItem(`trademind_memory_${userId}`);
     setMemory(null);
     setMessages([]);
   };
@@ -135,9 +158,7 @@ export default function TradeMindApp() {
         <button
           onClick={() => setShowInsights((v) => !v)}
           className="w-10 h-10 rounded-xl bg-violet-600 shadow-lg flex items-center justify-center text-white text-xs font-bold"
-        >
-          M
-        </button>
+        >M</button>
       </div>
 
       {showInsights && (

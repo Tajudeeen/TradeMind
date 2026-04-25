@@ -2,8 +2,29 @@
   "userId": "hmluh745v2hmo9ci2iu",
   "risk_profile": "unknown",
   "user_behavior": [],
-  "trade_history": [],
+  "trade_history": [
+    {
+      "asset": "ETH",
+      "direction": "long",
+      "reasoning": "Based on your unknown profile and 3 interactions, a position in ETH aligns with your typical approach. Simulating a long...",
+      "user_input": "Should I buy ETH right now?",
+      "simulated": true,
+      "outcome": "pending",
+      "id": "dbnxnvc0wk",
+      "timestamp": "2026-04-25T22:40:28.387Z"
+    },
+    {
+      "asset": "ETH",
+      "direction": "long",
+      "reasoning": "Based on your unknown profile and 2 interactions, a position in ETH aligns with your typical approach. Simulating a long...",
+      "user_input": "buy eth",
+      "simulated": true,
+      "outcome": "pending",
+      "id": "xn3gnngm7e",
+      "timestamp": "2026-04-25T22:39:08.164Z"
+    }
+  ],
   "notes": [],
-  "interaction_count": 0,
-  "last_updated": "2026-04-22T01:06:21.148Z"
+  "interaction_count": 3,
+  "last_updated": "2026-04-25T22:40:28.388Z"
 }
