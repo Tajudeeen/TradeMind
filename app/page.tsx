@@ -37,7 +37,7 @@ export default function TradeMindApp() {
   const [isLoading, setIsLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [showInsights, setShowInsights] = useState(false);
+  const [activeTab, setActiveTab] = useState<"chat" | "memory">("chat");
 
   useEffect(() => {
     const id = getOrCreateUserId();
@@ -48,6 +48,8 @@ export default function TradeMindApp() {
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isLoading || !userId) return;
+
+    setActiveTab("chat");
 
     const userMsg: ChatMessage = {
       id: Math.random().toString(36).slice(2),
@@ -66,11 +68,7 @@ export default function TradeMindApp() {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          message: content,
-          memory: currentMemory,
-        }),
+        body: JSON.stringify({ userId, message: content, memory: currentMemory }),
       });
 
       if (!res.ok) {
@@ -95,13 +93,12 @@ export default function TradeMindApp() {
 
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Unknown error";
-      const errMsg: ChatMessage = {
+      setMessages((prev) => [...prev, {
         id: Math.random().toString(36).slice(2),
         role: "agent",
         content: `Something went wrong: ${detail}`,
         timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, errMsg]);
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -131,16 +128,25 @@ export default function TradeMindApp() {
     setMessages([]);
   };
 
+  const handleMemoryToggle = () => {
+    setActiveTab((t) => t === "memory" ? "chat" : "memory");
+  };
+
   return (
     <div className="app-shell bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
       <Header
         walletAddress={walletAddress}
         onConnect={handleConnect}
         onReset={handleReset}
+        onMemoryToggle={handleMemoryToggle}
         userId={userId}
+        activeTab={activeTab}
       />
+
       <div className="flex flex-1 overflow-hidden min-h-0">
-        <main className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
+        <main className={`flex-1 flex flex-col overflow-hidden min-w-0 min-h-0 ${
+          activeTab === "memory" ? "hidden lg:flex" : "flex"
+        }`}>
           <ChatPanel
             messages={messages}
             isLoading={isLoading}
@@ -149,31 +155,46 @@ export default function TradeMindApp() {
             onInputChange={setInputValue}
           />
         </main>
-        <aside className="hidden lg:flex flex-col w-72 border-l border-zinc-800/60 overflow-hidden flex-shrink-0">
+
+        <aside className={`flex flex-col overflow-hidden flex-shrink-0 ${
+          activeTab === "memory"
+            ? "flex w-full lg:w-72 lg:border-l lg:border-zinc-800/60"
+            : "hidden lg:flex lg:w-72 lg:border-l lg:border-zinc-800/60"
+        }`}>
           <MemoryInsightsPanel memory={memory} isLoading={isLoading} />
         </aside>
       </div>
 
-      <div className="lg:hidden fixed bottom-20 right-4 z-10">
+      {/* Mobile bottom tab bar */}
+      <div className="lg:hidden flex-shrink-0 border-t border-zinc-800/60 flex">
         <button
-          onClick={() => setShowInsights((v) => !v)}
-          className="w-10 h-10 rounded-xl bg-violet-600 shadow-lg flex items-center justify-center text-white text-xs font-bold"
-        >M</button>
-      </div>
-
-      {showInsights && (
-        <div
-          className="lg:hidden fixed inset-0 z-20 bg-black/60"
-          onClick={() => setShowInsights(false)}
+          onClick={() => setActiveTab("chat")}
+          className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-xs transition-colors ${
+            activeTab === "chat" ? "text-violet-400" : "text-zinc-600"
+          }`}
         >
-          <div
-            className="absolute right-0 top-0 h-full w-80 bg-zinc-950 border-l border-zinc-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MemoryInsightsPanel memory={memory} isLoading={isLoading} />
-          </div>
-        </div>
-      )}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          Chat
+        </button>
+        <button
+          onClick={() => setActiveTab("memory")}
+          className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-xs transition-colors relative ${
+            activeTab === "memory" ? "text-violet-400" : "text-zinc-600"
+          }`}
+        >
+          {memory && memory.interaction_count > 0 && (
+            <span className="absolute top-2 right-[calc(50%-14px)] w-1.5 h-1.5 rounded-full bg-violet-500" />
+          )}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+          </svg>
+          Memory
+        </button>
+      </div>
     </div>
   );
 }
