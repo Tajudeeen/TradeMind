@@ -1,4 +1,3 @@
-// Core memory structure persisted in 0G Storage abstraction
 export interface AgentMemory {
   userId: string;
   risk_profile: "conservative" | "moderate" | "aggressive" | "unknown";
@@ -7,6 +6,8 @@ export interface AgentMemory {
   notes: string[];
   interaction_count: number;
   last_updated: string;
+  zg_root_hash?: string;
+  zg_tx_hash?: string;
 }
 
 export interface BehaviorTag {
@@ -35,6 +36,7 @@ export interface ChatMessage {
   timestamp: string;
   reasoning?: string;
   action?: AgentAction;
+  zg_proof?: ZGProof;
 }
 
 export interface AgentAction {
@@ -43,19 +45,18 @@ export interface AgentAction {
   label: string;
 }
 
+export interface ZGProof {
+  tx_hash: string;
+  root_hash: string;
+  tx_url: string;
+  stored_on_0g: boolean;
+}
+
 export interface AgentResponse {
   message: string;
   reasoning: string;
   action: AgentAction;
   updated_memory: AgentMemory;
   behavioral_signals: string[];
-}
-
-export interface MemoryInsights {
-  risk_profile: string;
-  top_patterns: { tag: string; count: number; description: string }[];
-  trade_count: number;
-  interaction_count: number;
-  notes: string[];
-  recent_trades: TradeRecord[];
+  zg_proof?: ZGProof;
 }

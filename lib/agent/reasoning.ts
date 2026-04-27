@@ -1,52 +1,54 @@
 import { AgentMemory, AgentAction } from "@/types";
 import { buildBehaviorContext } from "./behavior";
 
-const SYSTEM_PROMPT = `You are TradeMind, a personal onchain AI trading agent with persistent memory.
+export const SYSTEM_PROMPT = `You are TradeMind, a personal onchain AI trading agent with persistent memory.
 
 Your role is NOT to give generic financial advice. You analyze the user's specific behavioral patterns, emotional tendencies, and decision history to give deeply personalized insights.
 
 CORE PRINCIPLES:
-1. Reference the user's past behavior explicitly when relevant — mention specific counts, patterns, and past trades
+1. Reference the user's past behavior explicitly — mention specific counts, patterns, past trades
 2. Flag emotional patterns (FOMO, panic, overconfidence) you've observed
-3. Evolve your tone based on interaction count — newer users get more explanation, veterans get direct, blunt insights
+3. Evolve your tone based on interaction count — newer users get more explanation, veterans get blunt insights
 4. When simulating trades, be specific: asset, direction, reasoning, risk level
 5. Always connect current question to the user's behavioral profile
-6. NEVER give the same response twice — vary your phrasing, angle, and examples
+6. NEVER give the same response twice — vary your phrasing, angle, examples
 
 RESPONSE FORMAT (JSON only, no markdown):
 {
-  "message": "Your response — 2-4 sentences, direct, personal, references their actual patterns",
+  "message": "2-4 sentences, direct, personal, references actual patterns",
   "reasoning": "What patterns and history informed this response",
   "action": {
     "type": "simulate_trade | update_risk | flag_behavior | none",
-    "label": "Short label for the action taken",
+    "label": "Short label",
     "payload": {}
   },
   "behavioral_signals": ["tag1", "tag2"]
 }
 
-Avoid generic phrases like 'great question' or 'as an AI'. Sound like a sharp, slightly blunt analyst who has watched this person trade for months.`;
+Sound like a sharp, slightly blunt analyst who has watched this person trade for months.`;
 
-type AgentResult = {
+export type AgentResult = {
   message: string;
   reasoning: string;
   action: AgentAction;
   behavioral_signals: string[];
+  via0GCompute?: boolean;
+  computeProvider?: string;
 };
 
-function buildPrompt(userInput: string, memory: AgentMemory): string {
+export function buildPrompt(userInput: string, memory: AgentMemory): string {
   return `${buildBehaviorContext(memory)}
 
 USER MESSAGE: "${userInput}"
 
-Respond with JSON. Be specific to this user's patterns. Vary your phrasing from previous responses.`;
+Respond with JSON. Be specific to this user's patterns. Vary your phrasing.`;
 }
 
 const FALLBACK_VARIATIONS: Record<string, string[]> = {
   dca: [
     "DCA vs lump-sum is a risk management call, not a market timing one.",
     "The DCA vs all-in debate comes down to how much regret you can stomach.",
-    "Splitting your entry removes timing risk but also caps upside if you nail the bottom.",
+    "Splitting your entry removes timing risk but caps upside if you nail the bottom.",
   ],
   generic: [
     "Give me more context — what asset, what timeframe, what's making you hesitate?",
@@ -60,11 +62,11 @@ function pickVariant(pool: string[], seed: number): string {
   return pool[seed % pool.length];
 }
 
-function generateFallbackResponse(userInput: string, memory: AgentMemory): AgentResult {
-  const lower = userInput.toLowerCase();
-  const seed = memory.interaction_count;
+export function generateFallbackResponse(userInput: string, memory: AgentMemory): AgentResult {
+  const lower      = userInput.toLowerCase();
+  const seed       = memory.interaction_count;
   const topBehavior = [...memory.user_behavior].sort((a, b) => b.count - a.count)[0];
-  const asset = extractAsset(lower);
+  const asset      = extractAsset(lower);
 
   const isBuy      = /buy|long|enter|bullish|pump|load/i.test(lower);
   const isSell     = /sell|exit|short|bearish|dump|get out/i.test(lower);
@@ -78,86 +80,52 @@ function generateFallbackResponse(userInput: string, memory: AgentMemory): Agent
   const signals: string[] = [];
 
   if (isFirst) {
-    message = `Starting fresh. I'll build your profile as we talk — the more context you give me, the more specific I get. ${
-      asset
-        ? `For ${asset} specifically: what's your entry thesis and what timeframe are you thinking?`
-        : "What are you looking at and what's making you hesitate?"
-    }`;
-
+    message = `Starting fresh. I'll build your profile as we talk. ${asset ? `For ${asset}: what's your entry thesis and timeframe?` : "What are you looking at and what's making you hesitate?"}`;
   } else if (isDCA) {
-    const base = pickVariant(FALLBACK_VARIATIONS.dca, seed);
-    const addon =
-      memory.risk_profile === "aggressive"
-        ? " Your history leans aggressive — single entries have cost you before. Consider splitting it."
-        : memory.risk_profile === "conservative"
-        ? " Given your conservative profile, DCA is the right fit here."
-        : " With your profile, 2-3 tranches over a week is a reasonable middle ground.";
+    const base  = pickVariant(FALLBACK_VARIATIONS.dca, seed);
+    const addon = memory.risk_profile === "aggressive"
+      ? " Your history leans aggressive — single entries have cost you before. Consider splitting."
+      : memory.risk_profile === "conservative"
+      ? " Your conservative profile makes DCA the right fit here."
+      : " With your profile, 2-3 tranches over a week is a solid middle ground.";
     message = base + addon;
-    action = { type: "update_risk", label: "DCA preference noted", payload: {} };
-
+    action  = { type: "update_risk", label: "DCA preference noted", payload: {} };
   } else if (topBehavior?.tag === "late_entry_anxiety" && topBehavior.count >= 2 && /late|miss|already/i.test(lower)) {
     const variants = [
-      `You've flagged late entry anxiety ${topBehavior.count} times now. The move is already in — the real question is whether your original thesis still holds, not whether you missed the first leg.`,
-      `This is the ${topBehavior.count}th time you've worried about being late. Define your thesis independent of price action first, then decide.`,
-      `Late-entry anxiety again — ${topBehavior.count} times total. Ask yourself: would you take this trade if the chart started at today's price? That's your answer.`,
+      `You've flagged late entry anxiety ${topBehavior.count} times. The move is already in — does your thesis still hold, or are you just reacting to price?`,
+      `${topBehavior.count}th time worrying about being late. Define your thesis independent of price action first.`,
+      `Late-entry anxiety again (${topBehavior.count}x total). Would you take this trade if the chart started at today's price?`,
     ];
     message = pickVariant(variants, seed);
     signals.push("late_entry_anxiety");
-
   } else if (topBehavior?.tag === "fomo_driven" && topBehavior.count >= 2 && isBuy) {
     const variants = [
-      `FOMO entry detected — you've done this ${topBehavior.count} times. I'm simulating the position but flagging it: is this a thesis or a reaction?`,
-      `${topBehavior.count} FOMO signals in your history. This might be real conviction or it might be the crowd — which one is it this time?`,
-      `You've made reactive entries ${topBehavior.count} times before. Simulating this one, but your track record here says to wait for a pullback.`,
+      `FOMO entry detected — you've done this ${topBehavior.count} times. Is this a thesis or a reaction?`,
+      `${topBehavior.count} FOMO signals in your history. Real conviction or just the crowd?`,
+      `Reactive entries ${topBehavior.count} times before. Simulating this one but your track record says wait for a pullback.`,
     ];
     message = pickVariant(variants, seed);
-    action = { type: "simulate_trade", label: `${asset || "ETH"} long — FOMO flagged`, payload: { asset: asset || "ETH", direction: "long" } };
+    action  = { type: "simulate_trade", label: `${asset || "ETH"} long — FOMO flagged`, payload: { asset: asset || "ETH", direction: "long" } };
     signals.push("fomo_driven");
-
   } else if (isBuy && asset) {
-    const recentSimilar = memory.trade_history.filter((t) => t.asset === asset)[0];
-    if (recentSimilar) {
-      message = `You've simulated a ${asset} ${recentSimilar.direction} before on ${new Date(recentSimilar.timestamp).toLocaleDateString()}. Same thesis this time? Simulating the entry for comparison.`;
-    } else {
-      message = `First ${asset} entry in your history. Your ${memory.risk_profile} profile suggests ${
-        memory.risk_profile === "aggressive"
-          ? "going in with conviction but setting a hard stop."
-          : memory.risk_profile === "conservative"
-          ? "starting small and adding on confirmation."
-          : "a measured position — not max size on the first entry."
-      } Simulating the long.`;
-    }
+    const recentSimilar = memory.trade_history.find((t) => t.asset === asset);
+    message = recentSimilar
+      ? `You simulated a ${asset} ${recentSimilar.direction} on ${new Date(recentSimilar.timestamp).toLocaleDateString()}. Same thesis this time? Simulating for comparison.`
+      : `First ${asset} entry in your history. Your ${memory.risk_profile} profile suggests ${memory.risk_profile === "aggressive" ? "going in with conviction but set a hard stop." : memory.risk_profile === "conservative" ? "starting small and adding on confirmation." : "a measured position — not max size first."} Simulating the long.`;
     action = { type: "simulate_trade", label: `${asset} long simulated`, payload: { asset, direction: "long" } };
-
   } else if (isSell && asset) {
     const hasPanic = memory.user_behavior.find((b) => b.tag === "panic_seller" && b.count >= 2);
-    if (hasPanic) {
-      message = `Panic pattern flagged — you've done reactive exits ${hasPanic.count} times. Before you sell: has your original thesis actually broken, or is this price action noise?`;
-    } else {
-      message = `${asset} exit on the table. Simulating the position close — check if this aligns with your entry reasoning or if something changed.`;
-    }
+    message = hasPanic
+      ? `Panic pattern flagged — reactive exits ${hasPanic.count} times. Has your thesis actually broken or is this noise?`
+      : `${asset} exit on the table. Simulating the close — does it align with your entry reasoning?`;
     action = { type: "simulate_trade", label: `${asset} exit simulated`, payload: { asset, direction: "short" } };
-
   } else if (isRisk) {
-    message =
-      memory.risk_profile === "unknown"
-        ? `Your risk profile is still calibrating — ${memory.interaction_count} interactions in. The hesitation you're describing is data. Keep talking.`
-        : `Your risk profile reads as ${memory.risk_profile} based on ${memory.interaction_count} interactions. ${
-            memory.risk_profile === "aggressive"
-              ? "You tend to downplay risk in the moment — that pattern is worth watching."
-              : memory.risk_profile === "conservative"
-              ? "You consistently weight downside heavily. That's not weakness, it's a style."
-              : "You're in the middle — neither fully committed nor overly cautious. That can work if it's intentional."
-          }`;
+    message = memory.risk_profile === "unknown"
+      ? `Still calibrating — ${memory.interaction_count} interactions in. The hesitation is data. Keep talking.`
+      : `Risk profile: ${memory.risk_profile} (${memory.interaction_count} interactions). ${memory.risk_profile === "aggressive" ? "You tend to downplay risk in the moment — worth watching." : memory.risk_profile === "conservative" ? "You weight downside heavily. That's a style, not a weakness." : "Neither fully committed nor overly cautious. Works if it's intentional."}`;
     action = { type: "update_risk", label: "Risk profile updated", payload: {} };
-
   } else if (isAnalysis && asset) {
-    message = `Behavioral read on ${asset}: with your ${memory.risk_profile} profile and ${memory.interaction_count} past interactions, ${
-      topBehavior
-        ? `your dominant pattern is ${topBehavior.tag} (${topBehavior.count}x) — factor that into how you're reading this chart.`
-        : "no strong pattern has emerged yet. More data needed."
-    }`;
-
+    message = `Behavioral read on ${asset}: ${memory.risk_profile} profile, ${memory.interaction_count} interactions. ${topBehavior ? `Dominant pattern: ${topBehavior.tag} (${topBehavior.count}x) — factor that into how you're reading this.` : "No strong pattern yet."}`;
   } else {
     message = pickVariant(FALLBACK_VARIATIONS.generic, seed);
   }
@@ -186,9 +154,9 @@ function extractAsset(input: string): string {
 }
 
 async function callOpenAI(userInput: string, memory: AgentMemory): Promise<AgentResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey  = process.env.OPENAI_API_KEY;
   const baseURL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const model   = process.env.OPENAI_MODEL    || "gpt-4o-mini";
 
   if (!apiKey) return generateFallbackResponse(userInput, memory);
 
@@ -200,7 +168,7 @@ async function callOpenAI(userInput: string, memory: AgentMemory): Promise<Agent
         model,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: buildPrompt(userInput, memory) },
+          { role: "user",   content: buildPrompt(userInput, memory) },
         ],
         temperature: 0.75,
         max_tokens: 600,
@@ -210,8 +178,8 @@ async function callOpenAI(userInput: string, memory: AgentMemory): Promise<Agent
 
     if (!res.ok) return generateFallbackResponse(userInput, memory);
 
-    const data = await res.json();
-    const text = data.choices?.[0]?.message?.content || "{}";
+    const data   = await res.json();
+    const text   = data.choices?.[0]?.message?.content || "{}";
     const parsed = JSON.parse(text);
     if (parsed.action && !parsed.action.payload) parsed.action.payload = {};
     return parsed;
@@ -221,6 +189,27 @@ async function callOpenAI(userInput: string, memory: AgentMemory): Promise<Agent
 }
 
 export async function runAgentReasoning(userInput: string, memory: AgentMemory): Promise<AgentResult> {
+  // 1. Try 0G Compute first
+  if (process.env.ZG_PRIVATE_KEY && process.env.ZG_COMPUTE_PROVIDER) {
+    try {
+      const { runInferenceOn0G } = await import("@/lib/0g/compute");
+      const result = await runInferenceOn0G(SYSTEM_PROMPT, buildPrompt(userInput, memory));
+      if (result) {
+        return {
+          message: result.message || "Give me more context.",
+          reasoning: result.reasoning || "",
+          action: (result.action as AgentAction) || { type: "none", label: "Logged", payload: {} },
+          behavioral_signals: result.behavioral_signals || [],
+          via0GCompute: true,
+          computeProvider: result.provider,
+        };
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  // 2. Try OpenAI
   const result = await callOpenAI(userInput, memory);
   return {
     message: result.message || "Give me more context — what are you actually considering?",
