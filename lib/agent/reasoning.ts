@@ -63,10 +63,10 @@ function pickVariant(pool: string[], seed: number): string {
 }
 
 export function generateFallbackResponse(userInput: string, memory: AgentMemory): AgentResult {
-  const lower      = userInput.toLowerCase();
-  const seed       = memory.interaction_count;
+  const lower       = userInput.toLowerCase();
+  const seed        = memory.interaction_count;
   const topBehavior = [...memory.user_behavior].sort((a, b) => b.count - a.count)[0];
-  const asset      = extractAsset(lower);
+  const asset       = extractAsset(lower);
 
   const isBuy      = /buy|long|enter|bullish|pump|load/i.test(lower);
   const isSell     = /sell|exit|short|bearish|dump|get out/i.test(lower);
@@ -74,12 +74,22 @@ export function generateFallbackResponse(userInput: string, memory: AgentMemory)
   const isDCA      = /dca|dollar.?cost|average (in|down)|scale in|tranch/i.test(lower);
   const isAnalysis = /analyze|analysis|look at|check|thoughts on|what do you think/i.test(lower);
   const isFirst    = memory.interaction_count <= 1;
+  const isAudit    = /audit|explain.*memory|why.*profile|breakdown|what.*know|what.*detected/i.test(lower);
 
   let message = "";
   let action: AgentAction = { type: "none", label: "Logged", payload: {} };
   const signals: string[] = [];
 
-  if (isFirst) {
+  if (isAudit) {
+    const behaviors = memory.user_behavior
+      .sort((a, b) => b.count - a.count)
+      .map(b => `${b.tag} (${b.count}x): ${b.description}`)
+      .join("; ");
+    message = behaviors.length > 0
+      ? `Your ${memory.risk_profile} profile comes from ${memory.user_behavior.length} patterns across ${memory.interaction_count} interactions. Top signals: ${behaviors.slice(0, 250)}.`
+      : `${memory.interaction_count} interactions logged but no strong patterns yet. Keep talking.`;
+    action = { type: "flag_behavior", label: "Memory audit delivered", payload: {} };
+  } else if (isFirst) {
     message = `Starting fresh. I'll build your profile as we talk. ${asset ? `For ${asset}: what's your entry thesis and timeframe?` : "What are you looking at and what's making you hesitate?"}`;
   } else if (isDCA) {
     const base  = pickVariant(FALLBACK_VARIATIONS.dca, seed);
@@ -176,45 +186,55 @@ async function callOpenAI(userInput: string, memory: AgentMemory): Promise<Agent
       }),
     });
 
-    if (!res.ok) return generateFallbackResponse(userInput, memory);
+    if (!res.ok) {
+      console.error("[AI] Request failed:", res.status, await res.text().catch(() => ""));
+      return generateFallbackResponse(userInput, memory);
+    }
 
     const data   = await res.json();
     const text   = data.choices?.[0]?.message?.content || "{}";
     const parsed = JSON.parse(text);
     if (parsed.action && !parsed.action.payload) parsed.action.payload = {};
     return parsed;
-  } catch {
+  } catch (err) {
+    console.error("[AI] Error:", err instanceof Error ? err.message : err);
     return generateFallbackResponse(userInput, memory);
   }
 }
 
 export async function runAgentReasoning(userInput: string, memory: AgentMemory): Promise<AgentResult> {
-  // 1. Try 0G Compute first
-  if (process.env.ZG_PRIVATE_KEY && process.env.ZG_COMPUTE_PROVIDER) {
+  // 1. Try 0G Compute — triggered when OPENAI_API_KEY + OPENAI_BASE_URL + ZG_COMPUTE_PROVIDER are all set
+  //    This is the path when using: 0g-compute-cli inference get-secret
+  if (
+    process.env.OPENAI_API_KEY &&
+    process.env.OPENAI_BASE_URL &&
+    process.env.ZG_COMPUTE_PROVIDER
+  ) {
     try {
       const { runInferenceOn0G } = await import("@/lib/0g/compute");
       const result = await runInferenceOn0G(SYSTEM_PROMPT, buildPrompt(userInput, memory));
       if (result) {
+        console.log("[0G Compute] Inference successful via", process.env.OPENAI_BASE_URL);
         return {
-          message: result.message || "Give me more context.",
-          reasoning: result.reasoning || "",
-          action: (result.action as AgentAction) || { type: "none", label: "Logged", payload: {} },
+          message:            result.message            || "Give me more context.",
+          reasoning:          result.reasoning          || "",
+          action:             (result.action as AgentAction) || { type: "none", label: "Logged", payload: {} },
           behavioral_signals: result.behavioral_signals || [],
-          via0GCompute: true,
-          computeProvider: result.provider,
+          via0GCompute:       true,
+          computeProvider:    result.provider,
         };
       }
-    } catch {
-      // fall through
+    } catch (err) {
+      console.error("[0G Compute] Failed, falling through:", err instanceof Error ? err.message : err);
     }
   }
 
-  // 2. Try OpenAI
+  // 2. Fallback: plain OpenAI (or same key without ZG_COMPUTE_PROVIDER set)
   const result = await callOpenAI(userInput, memory);
   return {
-    message: result.message || "Give me more context — what are you actually considering?",
-    reasoning: result.reasoning || "",
-    action: result.action || { type: "none", label: "Logged", payload: {} },
+    message:            result.message            || "Give me more context — what are you actually considering?",
+    reasoning:          result.reasoning          || "",
+    action:             result.action             || { type: "none", label: "Logged", payload: {} },
     behavioral_signals: result.behavioral_signals || [],
   };
 }

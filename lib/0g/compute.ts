@@ -23,10 +23,10 @@ interface ComputeResult {
 
 export async function runInferenceOn0G(
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
 ): Promise<ComputeResult | null> {
-  const secret      = process.env.ZG_COMPUTE_SECRET;
-  const computeURL  = process.env.ZG_COMPUTE_URL;
+  const secret = process.env.ZG_COMPUTE_SECRET;
+  const computeURL = process.env.ZG_COMPUTE_URL;
 
   if (!secret || !computeURL) return null;
 
@@ -37,13 +37,13 @@ export async function runInferenceOn0G(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${secret}`,
+        Authorization: `Bearer ${secret}`,
       },
       body: JSON.stringify({
-        model: process.env.ZG_COMPUTE_MODEL || "neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8",
+        model: process.env.ZG_COMPUTE_MODEL || "qwen-2.5-7b-instruct",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user",   content: userPrompt },
+          { role: "user", content: userPrompt },
         ],
         temperature: 0.75,
         max_tokens: 600,
@@ -56,7 +56,7 @@ export async function runInferenceOn0G(
       return null;
     }
 
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     const text = data.choices?.[0]?.message?.content || "{}";
     const parsed = JSON.parse(text);
     if (parsed.action && !parsed.action.payload) parsed.action.payload = {};
@@ -65,9 +65,11 @@ export async function runInferenceOn0G(
       ...parsed,
       provider: computeURL,
     };
-
   } catch (err) {
-    console.error("[0G Compute Error]", err instanceof Error ? err.message : err);
+    console.error(
+      "[0G Compute Error]",
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }
